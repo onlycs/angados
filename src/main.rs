@@ -7,6 +7,7 @@ use core::{arch::asm, panic};
 use uart::Uart;
 
 pub mod asm;
+pub mod page;
 pub mod print;
 pub mod uart;
 
@@ -56,5 +57,12 @@ extern "C" fn abort() -> ! {
 #[unsafe(no_mangle)]
 extern "C" fn kmain() {
     Uart::new(0x1000_0000).init();
-    println!("Hello, World!");
+    page::init();
+
+    page::alloc(64);
+    page::debug();
+
+    loop {
+        read!();
+    }
 }

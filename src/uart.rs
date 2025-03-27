@@ -1,5 +1,7 @@
 use core::fmt;
 
+use crate::{print, println};
+
 pub struct Uart {
     base: usize,
 }
@@ -42,20 +44,20 @@ impl Uart {
             const DIVISOR_L: u8 = (DIVISOR >> 8) as u8;
             const DIVISOR_M: u8 = (DIVISOR & 0xff) as u8;
 
-            // enable the DLL and DLH
+            // enable the DLL and DLM
             ptr.add(3).write_volatile(LCR | 0b1 << 7);
 
             // put l and h bytes in DLL and DLM respectively
             ptr.add(0).write_volatile(DIVISOR_L);
             ptr.add(1).write_volatile(DIVISOR_M);
 
-            // after we change baud, we never touch the DLL and DLH again
+            // after we change baud, we never touch the DLL and DLM again
             // so we can set DLAB to 0
             ptr.add(3).write_volatile(LCR);
         }
     }
 
-    pub fn read(&mut self) -> Option<u8> {
+    pub fn read_raw(&mut self) -> Option<u8> {
         let ptr = self.ptr();
 
         unsafe {
@@ -68,6 +70,23 @@ impl Uart {
                 Some(ptr.add(0).read_volatile())
             }
         }
+    }
+
+    pub fn read(&mut self) -> Option<char> {
+        match self.read_raw() {
+            Some(b'\r') => {
+                print!("\n");
+                return Some('\n');
+            }
+            Some(b'\x7f') => print!("{} {}", 8 as char, 8 as char),
+            Some(byte) => {
+                print!("{}", byte as char);
+                return Some(byte as char);
+            }
+            _ => {}
+        };
+
+        None
     }
 
     fn write(&mut self, byte: u8) {
