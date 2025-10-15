@@ -59,9 +59,6 @@ extern "C" fn kmain() {
     Uart::new(0x1000_0000).init();
     page::init();
 
-    page::alloc(64);
-    page::debug();
-
     loop {
         read!();
     }
