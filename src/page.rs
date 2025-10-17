@@ -1,3 +1,8 @@
+use core::mem;
+
+use bitfield_struct::bitfield;
+use bitflags::bitflags;
+
 unsafe extern "C" {
     static HEAP_START: usize;
     static HEAP_SIZE: usize;
@@ -13,39 +18,47 @@ const fn align_up(value: usize, order: usize) -> usize {
     (value + o) & !o
 }
 
-/// Store flags for a page
-enum PageFlags {}
-impl PageFlags {
-    pub const EMPTY: u8 = 0b00;
-    pub const LAST: u8 = 0b10;
-    pub const TAKEN: u8 = 0b01;
+bitflags! {
+    #[derive(Debug)]
+    struct PageFlags: u8 {
+        const TAKEN = 0b01;
+        const LAST = 0b10;
+    }
 }
 
-#[derive(Debug)]
-#[repr(transparent)]
+impl PageFlags {
+    const fn into_bits(self) -> u8 {
+        self.bits()
+    }
+}
+
+#[bitfield(u8)]
 struct Page {
-    flags: u8,
+    #[bits(2, from = PageFlags::from_bits_truncate)]
+    flags: PageFlags,
+    #[bits(6)]
+    _pad: u8,
 }
 
 impl Page {
     /// Checks if last (0b10) flag is set
     fn is_last(&self) -> bool {
-        self.flags & PageFlags::LAST != 0
+        self.flags().contains(PageFlags::LAST)
     }
 
     /// Checks if taken (0b01) flag is set
     fn is_taken(&self) -> bool {
-        self.flags & PageFlags::TAKEN != 0
+        self.flags().contains(PageFlags::TAKEN)
     }
 
     /// Clears all flags (sets to 0b00)
     fn clear(&mut self) {
-        self.flags = PageFlags::EMPTY;
+        self.set_flags(PageFlags::empty());
     }
 
     /// Sets flags to a specific value
-    fn reset(&mut self, flags: u8) {
-        self.flags = flags;
+    fn reset(&mut self, flags: PageFlags) {
+        self.set_flags(flags);
     }
 }
 
@@ -60,7 +73,7 @@ pub fn init() {
         }
 
         // determine where usable memory starts
-        ALLOC_START = align_up(HEAP_START + num_pages * size_of::<Page>(), PAGE_ORDER);
+        ALLOC_START = align_up(HEAP_START + num_pages * mem::size_of::<Page>(), PAGE_ORDER);
     }
 }
 
@@ -105,7 +118,7 @@ pub fn alloc(pages: usize) -> *mut u8 {
     panic!("Out of memory");
 }
 
-pub fn dealloc(ptr: *mut u8) {
+pub fn free(ptr: *mut u8) {
     assert!(!ptr.is_null(), "Tried to deallocate a null pointer");
 
     unsafe {
@@ -134,4 +147,23 @@ pub fn dealloc(ptr: *mut u8) {
         // clear last bit
         (*p).clear();
     }
+}
+
+pub fn zalloc(pages: usize) -> *mut u8 {
+    let ptr = alloc(pages);
+
+    if ptr.is_null() {
+        return ptr;
+    }
+
+    let size = (pages * PAGE_SIZE) / mem::size_of::<u64>();
+    let big = ptr as *mut u64;
+
+    for i in 0..size {
+        unsafe {
+            *big.add(i) = 0;
+        }
+    }
+
+    ptr
 }

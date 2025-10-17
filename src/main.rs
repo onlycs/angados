@@ -7,6 +7,7 @@ use core::{arch::asm, panic};
 use uart::Uart;
 
 pub mod asm;
+pub mod mem;
 pub mod page;
 pub mod print;
 pub mod uart;
